@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Maps with Driving Route and Fuel Stops</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        #map {
+            height: 600px; /* Set the height of the map */
+            width: 100%; /* Set the width of the map */
+        }
+        .fuel-stop {
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .fuel-stop h5 {
+            margin: 0;
+        }
+    </style>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ maps }}&libraries=places"></script>
+</head>
+<body>
+
+<div class="container mt-4">
+    <h2 class="text-center">Total Fuel Cost: ${{ total_cost|floatformat:2 }}</h2>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div id="map"></div>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <h3>Fuel Stops Along the Route:</h3>
+            <div class="list-group">
+                {% for stop in fuel_stops %}
+                    <div class="fuel-stop list-group-item">
+                        <h5 class="font-weight-bold">{{ stop.name }}</h5>
+                        <p>{{ stop.address }}, {{ stop.city }}, {{ stop.state }}</p>
+                        <p>Price: <strong>${{ stop.price|floatformat:2 }}</strong> per gallon</p>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function initMap() {
+        // Ensure coordinates are parsed as floats
+        var startCoordinates = { 
+            lat: parseFloat({{ start_coordinates.0 }}), 
+            lng: parseFloat({{ start_coordinates.1 }}) 
+        };
+        var endCoordinates = { 
+            lat: parseFloat({{ end_coordinates.0 }}), 
+            lng: parseFloat({{ end_coordinates.1 }}) 
+        };
+
+        // Create a map instance and set the initial view
+        var map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 7, // Zoom level
+            center: startCoordinates // Center the map on the start location
+        });
+
+        // Add markers for the start and end locations
+        new google.maps.Marker({
+            position: startCoordinates,
+            map: map,
+            title: "Start Location"
+        });
+
+        new google.maps.Marker({
+            position: endCoordinates,
+            map: map,
+            title: "End Location"
+        });
+
+        // Draw the route on the map
+        var directionsService = new google.maps.DirectionsService();
+        var directionsRenderer = new google.maps.DirectionsRenderer({
+            map: map,
+            suppressMarkers: true // Do not show default markers on the route
+        });
+
+        var request = {
+            origin: startCoordinates,
+            destination: endCoordinates,
+            travelMode: google.maps.TravelMode.DRIVING // Set the travel mode to driving
+        };
+
+        // Request directions from the Directions Service
+        directionsService.route(request, function(result, status) {
+            if (status === 'OK') {
+                directionsRenderer.setDirections(result); // Render the directions on the map
+            } else {
+                alert('Directions request failed due to ' + status); // Alert on failure
+            }
+        });
+
+        // Add markers for fuel stops
+        var fuelStops = {{ fuel_stops|safe }}; // Get fuel stops data
+        fuelStops.forEach(stop => {
+            var stopCoordinates = { lat: parseFloat(stop.coordinates[0]), lng: parseFloat(stop.coordinates[1]) }; // Ensure fuel stop coordinates are parsed as floats
+            var stopMarker = new google.maps.Marker({
+                position: stopCoordinates,
+                map: map,
+                title: stop.name // Marker title
+            });
+
+            var infoWindow = new google.maps.InfoWindow({
+                content: `<b>${stop.name}</b><br>Price: $${parseFloat(stop.price).toFixed(2)} per gallon`
+            });
+
+            // Open info window on marker click
+            stopMarker.addListener('click', function() {
+                infoWindow.open(map, stopMarker);
+            });
+        });
+    }
+
+    // Initialize the map when the window loads
+    window.onload = initMap;
+</script>
+
+<script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.6/dist/umd/popper.min.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
