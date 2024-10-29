@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-g1kt$@+zo3klmu)2lmpsiinbz(=l6=8n_@18voni-g*qao0xhb
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["routes-3-znum.onrender.com"]
+ALLOWED_HOSTS = ["routes-3-n67v.onrender.com"]
 
 GOOGLE_API = "AIzaSyAsYmjElecB7_eXthdJw5OP_IcHEJbERzs"
 # Application definition
