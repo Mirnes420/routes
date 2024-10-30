@@ -11,15 +11,22 @@ from math import radians, sin, cos, sqrt, atan2
 
 GOOGLE_API = settings.GOOGLE_API
 
+import time
+import requests
+from django.http import JsonResponse
+from django.shortcuts import render
+from .models import FuelPrice
+
+# Fetch and render route data including selected fuel stops and total cost
 def fetch_route_data(request):
-    start_time = time.time()  # Start measuring time
+    start_time = time.time()
 
     # Extract coordinates or place names from URL parameters
     start_lat = request.GET.get('start_lat')
     start_lng = request.GET.get('start_lng')
     end_lat = request.GET.get('end_lat')
     end_lng = request.GET.get('end_lng')
-    
+
     start_place = request.GET.get('start_place')
     end_place = request.GET.get('end_place')
 
@@ -54,7 +61,7 @@ def fetch_route_data(request):
         decoded_polyline = decode_polyline(data['routes'][0]['overview_polyline']['points'])
 
         # Optimize fuel stop selection
-        selected_fuel_stops = select_fuel_stops(fuel_stops, start_lat, start_lng, decoded_polyline)
+        selected_fuel_stops = select_fuel_stops(fuel_stops, decoded_polyline, distance_threshold=1, interval_miles=500)
 
         # Calculate total cost based on selected stops
         total_cost = sum(stop['price'] for stop in selected_fuel_stops) * total_gallons_needed
@@ -72,11 +79,60 @@ def fetch_route_data(request):
 
     return JsonResponse({"error": "Route not found."}, status=404)
 
+# Selects the cheapest fuel stop within each 500-mile segment along the route
+def select_fuel_stops(fuel_stops, decoded_polyline, distance_threshold=1, interval_miles=500):
+    """Select the cheapest fuel stop within each 500-mile segment along the route."""
+    selected_fuel_stops = []
+    segment_distance = 0
+    cheapest_stop_in_segment = None
+    min_price_in_segment = float('inf')
+
+    # Loop through each point on the route
+    for i, route_point in enumerate(decoded_polyline):
+        # Accumulate distance between points on the polyline
+        if i > 0:
+            segment_distance += calculate_distance(
+                decoded_polyline[i - 1][0], decoded_polyline[i - 1][1],
+                route_point[0], route_point[1]
+            )
+
+        # Loop through each fuel stop to find the cheapest one within threshold
+        for stop in fuel_stops:
+            stop_lat = float(stop['latitude'])
+            stop_lng = float(stop['longitude'])
+            stop_price = float(stop['retail_price'])
+
+            # Check if the fuel stop is close to the current route point
+            if is_within_distance_to_route(stop_lat, stop_lng, [route_point], distance_threshold):
+                # Update cheapest stop if current stop is cheaper
+                if stop_price < min_price_in_segment:
+                    min_price_in_segment = stop_price
+                    cheapest_stop_in_segment = stop
+
+        # Once segment distance reaches the interval, add the cheapest stop in range
+        if segment_distance >= interval_miles and cheapest_stop_in_segment:
+            selected_fuel_stops.append({
+                'name': cheapest_stop_in_segment['truckstop_name'],
+                'address': cheapest_stop_in_segment['address'],
+                'city': cheapest_stop_in_segment['city'],
+                'state': cheapest_stop_in_segment['state'],
+                'price': min_price_in_segment,
+                'coordinates': [float(cheapest_stop_in_segment['latitude']), float(cheapest_stop_in_segment['longitude'])],
+            })
+            # Reset for the next segment
+            segment_distance = 0
+            cheapest_stop_in_segment = None
+            min_price_in_segment = float('inf')
+
+    return selected_fuel_stops
+
 
 def geocode_location(lat, lng, place_name):
-    """Geocode a location if lat/lng are not provided."""
+    
     if lat and lng:
         return float(lat), float(lng)
+    
+    """Geocode a location if lat/lng are not provided."""
     if place_name:
         geocode_url = f'https://maps.googleapis.com/maps/api/geocode/json?address={place_name}&key={GOOGLE_API}'
         response = requests.get(geocode_url)
@@ -86,54 +142,6 @@ def geocode_location(lat, lng, place_name):
                 location = data['results'][0]['geometry']['location']
                 return location['lat'], location['lng']
     return None, None
-
-def select_fuel_stops(fuel_stops, start_lat, start_lng, decoded_polyline):
-    """Select fuel stops based on proximity to the route."""
-    selected_fuel_stops = []
-    current_distance_range = 0
-    cheapest_stop_in_range = None
-    distance_threshold = 3  # miles
-
-    # Loop through each fuel stop and check if it's within distance
-    for stop in fuel_stops:
-        stop_lat = float(stop['latitude'])
-        stop_lng = float(stop['longitude'])
-
-        # Check if the fuel stop is close to the route
-        if is_within_distance_to_route(stop_lat, stop_lng, decoded_polyline, distance_threshold):
-            distance_to_stop = calculate_distance(start_lat, start_lng, stop_lat, stop_lng)
-
-            if current_distance_range == 0:  # First stop
-                current_distance_range += distance_to_stop
-                cheapest_stop_in_range = stop
-            else:
-                current_distance_range += distance_to_stop
-
-            if current_distance_range >= 500:  # Check if we have exceeded 500 miles
-                if cheapest_stop_in_range:
-                    selected_fuel_stops.append({
-                        'name': cheapest_stop_in_range['truckstop_name'],
-                        'address': cheapest_stop_in_range['address'],
-                        'city': cheapest_stop_in_range['city'],
-                        'state': cheapest_stop_in_range['state'],
-                        'price': float(cheapest_stop_in_range['retail_price']),
-                        'coordinates': [stop_lat, stop_lng],
-                    })
-                current_distance_range = 0
-                cheapest_stop_in_range = None
-
-    if cheapest_stop_in_range and current_distance_range > 0:
-        selected_fuel_stops.append({
-            'name': cheapest_stop_in_range['truckstop_name'],
-            'address': cheapest_stop_in_range['address'],
-            'city': cheapest_stop_in_range['city'],
-            'state': cheapest_stop_in_range['state'],
-            'price': float(cheapest_stop_in_range['retail_price']),
-            'coordinates': [stop_lat, stop_lng],
-        })
-
-    return selected_fuel_stops
-
 
 def decode_polyline(polyline_str):
     """Decode a Google Maps encoded polyline into a list of (lat, lng) tuples."""

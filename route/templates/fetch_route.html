@@ -7,8 +7,8 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <style>
         #map {
-            height: 600px; /* Set the height of the map */
-            width: 100%; /* Set the width of the map */
+            height: 600px; /* height of the map */
+            width: 100%; /* width of the map */
         }
         .fuel-stop {
             border: 1px solid #e0e0e0;
@@ -35,13 +35,17 @@
         <div class="col-md-12">
             <h3>Fuel Stops Along the Route:</h3>
             <div class="list-group">
-                {% for stop in fuel_stops %}
-                    <div class="fuel-stop list-group-item">
-                        <h5 class="font-weight-bold">{{ stop.name }}</h5>
-                        <p>{{ stop.address }}, {{ stop.city }}, {{ stop.state }}</p>
-                        <p>Price: <strong>${{ stop.price|floatformat:2 }}</strong> per gallon</p>
-                    </div>
-                {% endfor %}
+                {% if fuel_stops %}
+                    {% for stop in fuel_stops %}
+                        <div class="fuel-stop list-group-item">
+                            <h5 class="font-weight-bold">{{ stop.name }}</h5>
+                            <p>{{ stop.address }}, {{ stop.city }}, {{ stop.state }}</p>
+                            <p>Price: <strong>${{ stop.price|floatformat:2 }}</strong> per gallon</p>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No fuel stops needed for this route.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -82,7 +86,7 @@
         var directionsService = new google.maps.DirectionsService();
         var directionsRenderer = new google.maps.DirectionsRenderer({
             map: map,
-            suppressMarkers: true // Do not show default markers on the route
+            suppressMarkers: true // don't show default markers on the route
         });
 
         var request = {
@@ -103,15 +107,15 @@
         // Add markers for fuel stops
         var fuelStops = {{ fuel_stops|safe }}; // Get fuel stops data
         fuelStops.forEach(stop => {
-            var stopCoordinates = { lat: parseFloat(stop.coordinates[0]), lng: parseFloat(stop.coordinates[1]) }; // Ensure fuel stop coordinates are parsed as floats
+            var stopCoordinates = { lat: parseFloat(stop.coordinates[0]), lng: parseFloat(stop.coordinates[1]) }; 
             var stopMarker = new google.maps.Marker({
                 position: stopCoordinates,
                 map: map,
-                title: stop.name // Marker title
+                title: stop.name // Marker title is the fuel stop name
             });
 
             var infoWindow = new google.maps.InfoWindow({
-                content: `<b>${stop.name}</b><br>Price: $${parseFloat(stop.price).toFixed(2)} per gallon`
+                content: `<b>${stop.name}</b><br>Price: $${parseFloat(stop.price).toFixed(2)} per gallon` // Show the window with data when user clicks on the fuel stop marker
             });
 
             // Open info window on marker click
