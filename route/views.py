@@ -14,7 +14,6 @@ import pstats
 import io
 from shapely.geometry import Point
 import geopandas as gpd
-import geopandas as gpd
 import os
 import pandas as pd
 

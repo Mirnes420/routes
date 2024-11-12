@@ -1,83 +1,65 @@
+import sqlite3
+import json
 import os
-import django
-import csv
-import requests
-import time
 
-# Set the settings module
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'fuel_routes.settings')
-django.setup()
+# Path to the JSON file where the data will be saved
+json_file_path = './fuel_prices.json'
+database_path = './db.sqlite3'  # Adjust the path to your SQLite database if needed
 
-# Now import your model
-from route.models import FuelPrice
+# Function to load existing data from the JSON file
+def load_json_data():
+    if os.path.exists(json_file_path):
+        with open(json_file_path, 'r') as file:
+            return json.load(file)
+    return []
 
-# Path to your CSV file
-csv_file_path = './fuel-prices-for-be-assessment.csv'
+# Function to save data to the JSON file
+def save_to_json(data):
+    with open(json_file_path, 'w') as file:
+        json.dump(data, file, indent=4)
 
-# Google Maps Geocoding API Key
-GOOGLE_MAPS_API_KEY = 'AIzaSyAsYmjElecB7_eXthdJw5OP_IcHEJbERzs'
+# Load existing JSON data
+fuel_data = load_json_data()
 
-# Function to get latitude and longitude from address
-def get_lat_long(address, retries=3):
-    for attempt in range(retries):
-        try:
-            # Google Maps Geocoding API endpoint
-            response = requests.get('https://maps.googleapis.com/maps/api/geocode/json', params={
-                'address': address,
-                'key': GOOGLE_MAPS_API_KEY
-            })
+# Connect to the SQLite database
+connection = sqlite3.connect(database_path)
+cursor = connection.cursor()
 
-            # Check if the request was successful
-            if response.status_code == 200:
-                data = response.json()
-                if data['status'] == 'OK':
-                    return float(data['results'][0]['geometry']['location']['lat']), float(data['results'][0]['geometry']['location']['lng'])
-                else:
-                    print(f"No data found for address: {address}, Status: {data['status']}")
-                    return None, None
-            else:
-                print(f"Request failed with status code {response.status_code} for address: {address}")
-                return None, None
-        except Exception as e:
-            print(f"Error getting coordinates for {address}: {e}")
-            if attempt < retries - 1:
-                time.sleep(1)  # Wait before retrying
-            else:
-                return None, None
+# SQL query to fetch data from the table (adjust table and field names as needed)
+query = '''
+SELECT 
+    opis_truckstop_id, 
+    truckstop_name, 
+    address, 
+    city, 
+    state, 
+    rack_id, 
+    retail_price, 
+    latitude, 
+    longitude 
+FROM route_fuelprice  -- Adjust to the actual table name
+'''
 
-# Load data from CSV
-with open(csv_file_path, newline='') as csvfile:
-    reader = csv.DictReader(csvfile, delimiter=',')  # Use comma in the CSV file
+# Execute the query and process each row
+for row in cursor.execute(query):
+    # Create an entry dictionary with data from each row
+    entry = {
+        'opis_truckstop_id': row[0],
+        'truckstop_name': row[1],
+        'address': row[2],
+        'city': row[3],
+        'state': row[4],
+        'rack_id': row[5],
+        'retail_price': row[6],
+        'latitude': row[7],
+        'longitude': row[8]
+    }
+    # Append the entry to the list
+    fuel_data.append(entry)
 
-    for row in reader:
-        # Construct the full address, stripping any leading/trailing spaces
-        full_address = f"{row['Address'].strip()}, {row['City'].strip()}, {row['State'].strip()}"
+# Save all collected data to the JSON file
+save_to_json(fuel_data)
+print("Data loaded from database and saved to JSON successfully.")
 
-        # Get latitude and longitude using the full address
-        latitude, longitude = get_lat_long(full_address)
-
-        # If not found, try using just the city and state
-        if latitude is None or longitude is None:
-            city_state_address = f"{row['City'].strip()}, {row['State'].strip()}"
-            print(f"Retrying with city and state: {city_state_address}")
-            latitude, longitude = get_lat_long(city_state_address)
-
-        # Create a FuelPrice entry if coordinates are found
-        if latitude is not None and longitude is not None:
-            FuelPrice.objects.create(
-                opis_truckstop_id=row['OPIS Truckstop ID'],
-                truckstop_name=row['Truckstop Name'],
-                address=row['Address'],  # Store the original address
-                city=row['City'],
-                state=row['State'],
-                rack_id=row['Rack ID'],
-                retail_price=row['Retail Price'],
-                latitude=latitude,
-                longitude=longitude
-            )
-        else:
-            print(f"Failed to retrieve coordinates for address: {full_address} and city/state: {city_state_address}")
-
-        time.sleep(1)  # Add a delay between requests to avoid rate limiting
-
-print("Data loaded successfully.")
+# Close the database connection
+connection.close()
