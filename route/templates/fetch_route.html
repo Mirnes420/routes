@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Google Maps with Driving Route and Fuel Stops</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+
     <style>
         #map {
             height: 600px; /* height of the map */
@@ -20,8 +21,10 @@
             margin: 0;
         }
     </style>
+
     <script src="https://maps.googleapis.com/maps/api/js?key={{ maps }}&libraries=places"></script>
 </head>
+
 <body>
 
 <div class="container mt-4">
@@ -106,6 +109,7 @@
 
         // Add markers for fuel stops
         var fuelStops = {{ fuel_stops|safe }}; // Get fuel stops data
+        console.log('fuelStops', fuelStops)
         fuelStops.forEach(stop => {
             var stopCoordinates = { lat: parseFloat(stop.coordinates[0]), lng: parseFloat(stop.coordinates[1]) }; 
             var stopMarker = new google.maps.Marker({
