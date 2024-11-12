@@ -16,6 +16,9 @@ from shapely.geometry import Point
 import geopandas as gpd
 import os
 import pandas as pd
+import pyogrio
+
+
 
 GOOGLE_API = settings.GOOGLE_API
 
@@ -31,7 +34,8 @@ for filename in os.listdir(states_dir):
         file_path = os.path.join(states_dir, filename)
         
         # Read each state's GeoJSON file into a GeoDataFrame
-        state_gdf = gpd.read_file(file_path)
+        state_gdf = gpd.read_file(file_path,  engine="pyogrio")
+    
         
         # Extract the state name from the file name (e.g., "alabama.geojson" -> "Alabama")
         state_name = filename.split('.')[0].capitalize()
